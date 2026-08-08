@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slope / Rest / Access</title>
+
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <div id="map" aria-label="Interactive accessibility map"></div>
+
+    <header class="topbar glass-panel">
+      <div class="brand-block">
+        <div class="eyebrow">MORNINGSIDE HEIGHTS · WEST HARLEM</div>
+        <h1>SLOPE / REST / ACCESS</h1>
+        <p>Wheelchair accessibility across sloped street networks</p>
+      </div>
+
+      <div class="top-controls">
+        <div class="mode-switch" role="tablist" aria-label="Analysis mode">
+          <button id="individualModeBtn" class="mode-btn active" type="button">Individual Street</button>
+          <button id="networkModeBtn" class="mode-btn" type="button">Network Analysis</button>
+        </div>
+
+        <div class="view-switch" aria-label="Map view">
+          <button id="view3dBtn" class="view-btn active" type="button">3D</button>
+          <button id="view2dBtn" class="view-btn" type="button">2D</button>
+        </div>
+      </div>
+    </header>
+
+    <section id="streetControls" class="street-controls glass-panel">
+      <div class="street-control-head">
+        <span class="panel-kicker">SELECT STREET</span>
+        <span id="streetCounter" class="street-counter">— / —</span>
+      </div>
+
+      <div class="street-id-row">
+        <button id="prevStreetBtn" class="square-btn" type="button" aria-label="Previous street">←</button>
+        <div>
+          <div class="street-id-label">STREET</div>
+          <div id="selectedStreetId" class="street-id-value">—</div>
+        </div>
+        <button id="nextStreetBtn" class="square-btn" type="button" aria-label="Next street">→</button>
+      </div>
+
+      <input id="streetSlider" class="street-slider" type="range" min="0" max="1" value="0" step="1" />
+
+      <div class="street-actions">
+        <button id="focusStreetBtn" class="text-btn" type="button">Focus selected street</button>
+        <span class="hint">or click a street on the map</span>
+      </div>
+    </section>
+
+    <section id="networkControls" class="network-controls glass-panel hidden">
+      <div class="panel-kicker">NETWORK ANALYSIS</div>
+      <button class="network-layer-btn active" data-layer="landing" type="button">
+        <span class="network-dot landing-dot"></span>
+        <span>
+          <strong>Landing-Like Segments</strong>
+          <small>Modeled slope ≤ 2%</small>
+        </span>
+      </button>
+      <button class="network-layer-btn" data-layer="uphill" type="button">
+        <span class="network-dot uphill-dot"></span>
+        <span>
+          <strong>Longest Steep Uphill</strong>
+          <small>Longest continuous run per street</small>
+        </span>
+      </button>
+      <button class="network-layer-btn" data-layer="access" type="button">
+        <span class="network-dot access-dot"></span>
+        <span>
+          <strong>Landing Accessibility</strong>
+          <small>Network distance to nearest landing</small>
+        </span>
+      </button>
+    </section>
+
+    <section id="legend" class="legend glass-panel" aria-label="Map legend"></section>
+
+    <button id="toggleDashboardBtn" class="dashboard-toggle" type="button" aria-label="Collapse dashboard">⌄</button>
+
+    <section id="dashboard" class="dashboard glass-panel">
+      <div class="dashboard-header">
+        <div>
+          <div id="dashboardKicker" class="panel-kicker">INDIVIDUAL STREET ANALYSIS</div>
+          <div class="dashboard-title-row">
+            <h2 id="dashboardTitle">Street —</h2>
+            <span id="qualityBadge" class="quality-badge">—</span>
+          </div>
+        </div>
+        <p id="dashboardSummary" class="dashboard-summary">Select a street to inspect its slope, continuous uphill burden, and access to landing-like segments.</p>
+      </div>
+
+      <div id="individualDashboard" class="individual-dashboard">
+        <article class="profile-card dashboard-card">
+          <div class="metric-heading">
+            <span>SLOPE PROFILE</span>
+            <span id="profileSegmentCount" class="metric-secondary">— segments</span>
+          </div>
+          <div id="slopeProfile" class="slope-profile" aria-label="Segment slope profile"></div>
+          <div class="profile-axis">
+            <span>start</span>
+            <span>street direction →</span>
+            <span>end</span>
+          </div>
+        </article>
+
+        <article class="metric-card dashboard-card">
+          <div class="metric-heading">MEAN ABS. SLOPE</div>
+          <div class="metric-main"><span id="meanSlopeValue">—</span><small>%</small></div>
+          <div class="mini-scale"><div id="meanSlopeBar" class="mini-scale-fill"></div></div>
+          <div class="metric-note">Average modeled running slope</div>
+        </article>
+
+        <article class="metric-card dashboard-card">
+          <div class="metric-heading">MAX SEGMENT SLOPE</div>
+          <div class="metric-main"><span id="maxSlopeValue">—</span><small>%</small></div>
+          <div class="threshold-row"><span>8.33% benchmark</span><span id="maxSlopeDelta">—</span></div>
+          <div class="mini-scale threshold-scale">
+            <span class="threshold-mark"></span>
+            <div id="maxSlopeBar" class="mini-scale-fill warm"></div>
+          </div>
+        </article>
+
+        <article class="metric-card dashboard-card">
+          <div class="metric-heading">SLOPE VARIATION</div>
+          <div class="metric-main"><span id="slopeVariationValue">—</span><small>pp</small></div>
+          <div class="metric-note">Max − min segment slope</div>
+          <div id="variationTicks" class="variation-ticks"></div>
+        </article>
+
+        <article class="metric-card dashboard-card progress-card">
+          <div class="metric-heading">CONTINUOUS STEEP UPHILL</div>
+          <div class="dual-metric">
+            <div><strong id="uphillLengthValue">—</strong><small> ft</small></div>
+            <div><strong id="uphillRatioValue">—</strong><small>%</small></div>
+          </div>
+          <div class="progress-track"><div id="uphillRatioBar" class="progress-fill uphill-fill"></div></div>
+          <div class="metric-note">Longest run / analyzed street length</div>
+        </article>
+
+        <article class="metric-card dashboard-card landing-card">
+          <div class="metric-heading">LANDING-LIKE COVERAGE</div>
+          <div class="ring-wrap">
+            <div id="landingRing" class="coverage-ring"><span id="landingCoverageValue">—%</span></div>
+            <div class="ring-copy">
+              <strong>Modeled level/rest opportunity</strong>
+              <small>Segments with slope ≤ 2%</small>
+            </div>
+          </div>
+        </article>
+
+        <article class="metric-card dashboard-card distance-card">
+          <div class="metric-heading">DISTANCE TO LANDING</div>
+          <div class="distance-values">
+            <div><span>Mean</span><strong id="meanDistanceValue">—</strong><small> ft</small></div>
+            <div><span>Max</span><strong id="maxDistanceValue">—</strong><small> ft</small></div>
+          </div>
+          <div class="distance-track"><div id="distanceRange" class="distance-range"></div></div>
+          <div id="unreachableNote" class="metric-note">—</div>
+        </article>
+      </div>
+
+      <div id="networkDashboard" class="network-dashboard hidden">
+        <article class="network-summary-card dashboard-card">
+          <div class="metric-heading">NETWORK SNAPSHOT</div>
+          <div class="network-big-number"><span id="networkSegmentsValue">—</span><small>segments</small></div>
+          <p id="networkNarrative">Modeled street-aligned sidewalk running slope across the study area.</p>
+        </article>
+
+        <article class="metric-card dashboard-card">
+          <div class="metric-heading">MEAN ABS. SLOPE</div>
+          <div class="metric-main"><span id="networkMeanSlopeValue">—</span><small>%</small></div>
+          <div class="mini-scale"><div id="networkMeanSlopeBar" class="mini-scale-fill"></div></div>
+          <div class="metric-note">Across valid modeled segments</div>
+        </article>
+
+        <article class="metric-card dashboard-card landing-card">
+          <div class="metric-heading">LANDING-LIKE COVERAGE</div>
+          <div class="ring-wrap">
+            <div id="networkLandingRing" class="coverage-ring"><span id="networkLandingCoverageValue">—%</span></div>
+            <div class="ring-copy">
+              <strong id="networkLandingCount">— segments</strong>
+              <small>Slope ≤ 2%</small>
+            </div>
+          </div>
+        </article>
+
+        <article class="metric-card dashboard-card">
+          <div class="metric-heading">LONGEST STEEP UPHILL</div>
+          <div class="metric-main"><span id="networkLongestUphillValue">—</span><small>ft</small></div>
+          <div class="metric-note">Longest selected continuous run</div>
+          <div id="networkUphillBars" class="micro-bars"></div>
+        </article>
+
+        <article class="metric-card dashboard-card distance-card">
+          <div class="metric-heading">LANDING ACCESSIBILITY</div>
+          <div class="distance-values">
+            <div><span>Mean</span><strong id="networkMeanDistanceValue">—</strong><small> ft</small></div>
+            <div><span>Max</span><strong id="networkMaxDistanceValue">—</strong><small> ft</small></div>
+          </div>
+          <div class="distance-track"><div id="networkDistanceRange" class="distance-range"></div></div>
+          <div id="networkUnreachableNote" class="metric-note">—</div>
+        </article>
+      </div>
+    </section>
+
+    <div id="tokenNotice" class="token-notice hidden">
+      <strong>Add your Mapbox public token</strong>
+      <span>Open <code>config.js</code> and replace the placeholder token, then refresh.</span>
+    </div>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
